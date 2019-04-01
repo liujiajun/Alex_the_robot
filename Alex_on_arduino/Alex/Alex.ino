@@ -1,8 +1,17 @@
+#include <PID_v1.h>
 #include <serialize.h>
 #include <math.h>
 #include "packet.h"
 #include "constants.h"
 
+//double lsp, lin, lout, rsp, rin, rout;
+//PID leftpid(&lin, &lout, &lsp,0.5,0,0,DIRECT);
+//PID rightpid(&rin, &rout, &rsp,0.5,0,0,DIRECT);
+double sp=0, in, out;
+PID pid(&in, &out, &sp,1.8,0.3,0,DIRECT);
+double lspeed, rspeed;
+unsigned long lcnt=0, rcnt=0, ltimer=0, rtimer=0;
+int val;
 
 typedef enum {
   STOP = 0,
@@ -27,21 +36,21 @@ volatile TDirection dir = STOP;
 // We will use this to calculate forward/backward distance traveled 
 // by taking revs * WHEEL_CIRC
 
-#define WHEEL_CIRC          37.7
+#define WHEEL_CIRC          24
 
 // Motor control pins. You need to adjust these till
 // Alex moves in the correct direction
-#define LF                  6   // Left forward pin
-#define LR                  5   // Left reverse pin
-#define RF                  9  // Right forward pin
-#define RR                  10  // Right reverse pin
+#define LF                  5   // Left forward pin
+#define LR                  6   // Left reverse pin
+#define RF                  10  // Right forward pin
+#define RR                  9  // Right reverse pin
 
 //PI,
 #define PI 3.141592654
 
 //Alex's length and breadth in cm
-#define ALEX_LENGTH  8
-#define ALEX_BREADTH 3
+#define ALEX_LENGTH  18
+#define ALEX_BREADTH 11
 
 float AlexDiagonal = 0.0;
 float AlexCirc = 0.0;
@@ -228,6 +237,8 @@ void enablePullups()
 // Functions to be called by INT0 and INT1 ISRs.
 void leftISR()
 {
+  lcnt++;
+  
   if (dir == FORWARD) {
     leftForwardTicks++;
   } else if (dir == BACKWARD) {
@@ -247,6 +258,7 @@ void leftISR()
     forwardDist = (unsigned long) ((float)leftForwardTicks / COUNTS_PER_REV * WHEEL_CIRC);
   else if (dir == BACKWARD)
     reverseDist = (unsigned long) ((float)leftReverseTicks / COUNTS_PER_REV * WHEEL_CIRC); 
+
   
   //Serial.print("LEFT: ");
   //Serial.println(leftTicks);
@@ -254,6 +266,8 @@ void leftISR()
 
 void rightISR()
 {
+  rcnt++;
+  //Serial.println(rcnt);
   
   if (dir == FORWARD) {
     rightForwardTicks++;
@@ -396,25 +410,20 @@ void forward(float dist, float speed)
       deltaDist = dist;
   else
       deltaDist = 9999999;
-
-  newDist = forwardDist + deltaDist;
-  
+  newDist = forwardDist + deltaDist; 
   dir = FORWARD;
   
-  int val = pwmVal(speed);
-
-  // For now we will ignore dist and move
-  // forward indefinitely. We will fix this
-  // in Week 9.
+  val = speed;//pwmVal(speed);
+  //lsp = val; rsp = val;
 
   // LF = Left forward pin, LR = Left reverse pin
   // RF = Right forward pin, RR = Right reverse pin
   // This will be replaced later with bare-metal code.
   
-  analogWrite(LF, val);
-  analogWrite(RF, val);
-  analogWrite(LR,0);
-  analogWrite(RR, 0);
+  //analogWrite(LF, val);
+  //analogWrite(RF, val);
+  //analogWrite(LR,0);
+  //analogWrite(RR, 0);
 }
 
 // Reverse Alex "dist" cm at speed "speed".
@@ -457,14 +466,14 @@ void reverse(float dist, float speed)
 
 unsigned long computeDeltaTicks (float ang)
 {
-  unsigned long ticks = (unsigned long) ((ang * AlexCirc * COUNTS_PER_REV ) / (360.0 * WHEEL_CIRC));
+  unsigned long ticks = (unsigned long) ((ang * AlexCirc * COUNTS_PER_REV ) / (360.0 * WHEEL_CIRC)) * 0.39;
   return ticks;
 }
 
 
 void left(float ang, float speed)
 {
-  int val = pwmVal(speed);
+  val = speed;
   dir = LEFT;
   
   if (ang == 0)
@@ -478,10 +487,10 @@ void left(float ang, float speed)
   // We will also replace this code with bare-metal later.
   // To turn left we reverse the left wheel and move
   // the right wheel forward.
-  analogWrite(LR, val);
-  analogWrite(RF, val);
-  analogWrite(LF, 0);
-  analogWrite(RR, 0);
+  //analogWrite(LR, val);
+  //analogWrite(RF, val);
+  //analogWrite(LF, 0);
+  //analogWrite(RR, 0);
 }
 
 // Turn Alex right "ang" degrees at speed "speed".
@@ -492,7 +501,7 @@ void left(float ang, float speed)
 void right(float ang, float speed)
 {
   dir = RIGHT;
-  int val = pwmVal(speed);
+  int val = speed;
 
   if (ang == 0)
       deltaTicks = 99999999;
@@ -514,6 +523,7 @@ void right(float ang, float speed)
 // Stop Alex. To replace with bare-metal code later.
 void stop()
 {
+  dir = STOP; ///xxxxx
   analogWrite(LF, 0);
   analogWrite(LR, 0);
   analogWrite(RF, 0);
@@ -652,6 +662,9 @@ void setup() {
   enablePullups();
   initializeState();
   sei();
+
+  pid.SetMode(AUTOMATIC);
+  pid.SetOutputLimits(-50,50);
 }
 
 void handlePacket(TPacket *packet)
@@ -678,14 +691,8 @@ void handlePacket(TPacket *packet)
 
 void loop() {
 
-// Uncomment the code below for Step 2 of Activity 3 in Week 8 Studio 2
-
-// forward(0, 100);
-
-// Uncomment the code below for Week 9 Studio 2
-
-
-  // put your main code here, to run repeatedly:
+  //Serial.print("spd: "); 
+  //Serial.print(lspeed-rspeed); Serial.print(" | "); Serial.print(lspeed); Serial.print(" "); Serial.print(rspeed); Serial.print("   ");
   TPacket recvPacket; // This holds commands from the Pi
 
   TResult result = readPacket(&recvPacket);
@@ -702,7 +709,20 @@ void loop() {
       {
         sendBadChecksum();
       }
-       
+
+  if ((millis()-ltimer) > 200){
+    lspeed = lcnt;/// 0.2;
+    lcnt = 0;
+    ltimer = millis();
+  }
+  if ((millis()-rtimer) > 200){
+    rspeed = rcnt; /// 0.2;
+    rcnt = 0;
+    rtimer = millis();
+  }
+  
+  in = lspeed - rspeed + 0.5;
+  
   if(deltaDist > 0)
   {   
       if(dir==FORWARD)
@@ -712,7 +732,16 @@ void loop() {
               deltaDist=0;
               newDist=0;
               stop();
-          }   
+          } else {
+              pid.Compute();
+              int lm = val+out;
+              int rm = (val-out);
+              analogWrite(LF, lm);
+              analogWrite(RF, rm);
+              analogWrite(LR,0); analogWrite(RR,0);
+              //Serial.print("output: "); Serial.print(out); Serial.print("|"); 
+              //Serial.print(lm); Serial.print(" "); Serial.println(rm);
+          }
       }   
       else
           if(dir == BACKWARD)
@@ -744,7 +773,15 @@ if(deltaTicks > 0)
               deltaTicks=0;
               targetTicks=0;
               stop();
-          }   
+          } else {
+            pid.Compute();
+            int lm = val+out;
+            int rm = (val-out);
+            //Serial.print("output: "); Serial.print(val); Serial.print("|"); 
+            //Serial.print(lm); Serial.print(" "); Serial.println(rm);
+            analogWrite(LF, 0); analogWrite(RF, rm);
+            analogWrite(LR,lm); analogWrite(RR,0);
+          }
       }   
       else
           if(dir == RIGHT)
