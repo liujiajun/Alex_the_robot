@@ -1,6 +1,7 @@
 #include <PID_v1.h>
 #include <serialize.h>
 #include <math.h>
+#include <MsTimer2.h>
 #include "packet.h"
 #include "constants.h"
 
@@ -646,6 +647,25 @@ void waitForHello()
           sendBadChecksum();
   } // !exit
 }
+void goPID(){
+  lspeed = lcnt;/// 0.1;
+  lcnt = 0;
+  rspeed = rcnt; /// 0.1;
+  rcnt = 0;
+  in = lspeed - rspeed;
+  pid.Compute();
+  int lm = val+out;
+  int rm = (val-out);
+  if (dir == FORWARD){
+      analogWrite(LF, lm); analogWrite(RF, rm);
+      analogWrite(LR,0); analogWrite(RR,0);
+  } else if (dir == LEFT) {
+       analogWrite(LF, 0); analogWrite(RF, rm);
+       analogWrite(LR,lm); analogWrite(RR,0);
+  } else if (dir == STOP){
+    stop();
+  }
+}
 
 void setup() {
   // put your setup code here, to run once:
@@ -662,9 +682,11 @@ void setup() {
   enablePullups();
   initializeState();
   sei();
-
+  MsTimer2::set(40, goPID);
+  MsTimer2::start();
   pid.SetMode(AUTOMATIC);
   pid.SetOutputLimits(-50,50);
+  //forward(0,120);
 }
 
 void handlePacket(TPacket *packet)
@@ -709,19 +731,6 @@ void loop() {
       {
         sendBadChecksum();
       }
-
-  if ((millis()-ltimer) > 200){
-    lspeed = lcnt;/// 0.2;
-    lcnt = 0;
-    ltimer = millis();
-  }
-  if ((millis()-rtimer) > 200){
-    rspeed = rcnt; /// 0.2;
-    rcnt = 0;
-    rtimer = millis();
-  }
-  
-  in = lspeed - rspeed + 0.5;
   
   if(deltaDist > 0)
   {   
@@ -733,12 +742,7 @@ void loop() {
               newDist=0;
               stop();
           } else {
-              pid.Compute();
-              int lm = val+out;
-              int rm = (val-out);
-              analogWrite(LF, lm);
-              analogWrite(RF, rm);
-              analogWrite(LR,0); analogWrite(RR,0);
+              
               //Serial.print("output: "); Serial.print(out); Serial.print("|"); 
               //Serial.print(lm); Serial.print(" "); Serial.println(rm);
           }
@@ -774,13 +778,6 @@ if(deltaTicks > 0)
               targetTicks=0;
               stop();
           } else {
-            pid.Compute();
-            int lm = val+out;
-            int rm = (val-out);
-            //Serial.print("output: "); Serial.print(val); Serial.print("|"); 
-            //Serial.print(lm); Serial.print(" "); Serial.println(rm);
-            analogWrite(LF, 0); analogWrite(RF, rm);
-            analogWrite(LR,lm); analogWrite(RR,0);
           }
       }   
       else
