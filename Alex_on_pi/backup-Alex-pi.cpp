@@ -46,12 +46,7 @@ void handleStatus(TPacket *packet)
 	printf("Reverse Distance:\t\t%d\n", packet->params[9]);
 	printf("\n---------------------------------------\n\n");
 }
-void handleColor(TPacket *packet)
-{
-	printf("Red: %d\n", packet -> params[0]);
-	printf("Green: %d\n", packet -> params[1]);
-	printf("Blue: %d\n", packet -> params[2]);
-}
+
 void handleResponse(TPacket *packet)
 {
 	// The response code is stored in command
@@ -64,10 +59,7 @@ void handleResponse(TPacket *packet)
 		case RESP_STATUS:
 			handleStatus(packet);
 		break;
-		
-		case RESP_COLOR:
-			handleColor(packet);
-		break;
+
 		default:
 			printf("Alex is confused.\n");
 	}
@@ -235,18 +227,11 @@ void sendCommand(char command)
 			sendPacket(&commandPacket);
 			break;
 
-		case 'y':
-		case 'Y':
-			commandPacket.command = COMMAND_GET_COLOR;
-			sendPacket(&commandPacket);
-			break;
-			
 		case 'q':
 		case 'Q':
 			exitFlag=1;
 			break;
 
-			
 		default:
 			printf("Bad command\n");
 

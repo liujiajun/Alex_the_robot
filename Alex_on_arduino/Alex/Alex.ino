@@ -4,12 +4,18 @@
 #include <MsTimer2.h>
 #include "packet.h"
 #include "constants.h"
+#define CS_S0 A4
+#define CS_S1 A3
+#define CS_S2 A1
+#define CS_S3 A0
+#define CS_Out A2
+//RGB
+int red;
+int green;
+int blue;
 
-//double lsp, lin, lout, rsp, rin, rout;
-//PID leftpid(&lin, &lout, &lsp,0.5,0,0,DIRECT);
-//PID rightpid(&rin, &rout, &rsp,0.5,0,0,DIRECT);
 double sp=0, in, out;
-PID pid(&in, &out, &sp,1.8,0.3,0,DIRECT);
+PID pid(&in, &out, &sp,2.5,3,0,DIRECT);
 double lspeed, rspeed;
 unsigned long lcnt=0, rcnt=0, ltimer=0, rtimer=0;
 int val;
@@ -67,7 +73,7 @@ volatile unsigned long rightForwardTicks;
 volatile unsigned long leftReverseTicks; 
 volatile unsigned long rightReverseTicks;
 
-
+ 
 volatile unsigned long leftForwardTicksTurns; 
 volatile unsigned long rightForwardTicksTurns;
 volatile unsigned long leftReverseTicksTurns; 
@@ -142,7 +148,32 @@ void sendStatus()
   // to send out the packet. See sendMessage on how to use sendResponse.
   //
 }
-
+void sendColor()
+{
+  const int N = 10;
+  TPacket colorPacket;
+  colorPacket.packetType = PACKET_TYPE_RESPONSE;
+  colorPacket.command = RESP_COLOR;
+  int rsum=0, gsum=0, bsum=0;
+  for(int i=0; i<N; i++){
+    digitalWrite(CS_S2,LOW);
+    digitalWrite(CS_S3,LOW);
+    rsum += pulseIn(CS_Out, LOW);
+    delay(40);
+    digitalWrite(CS_S2,HIGH);
+    digitalWrite(CS_S3,HIGH);
+    gsum += pulseIn(CS_Out, HIGH);
+    delay(40);
+    digitalWrite(CS_S2,LOW);
+    digitalWrite(CS_S3,HIGH);
+    bsum += pulseIn(CS_Out, HIGH);
+    delay(40);
+}
+  colorPacket.params[0] = rsum/N;
+  colorPacket.params[1] = gsum/N;
+  colorPacket.params[2] = bsum/N;
+  sendResponse (&colorPacket);
+}
 void sendMessage(const char *message)
 {
   // Sends text messages back to the Pi. Useful
@@ -591,7 +622,9 @@ void handleCommand(TPacket *command)
         sendOK();
         right((float) command->params[0], (float) command->params[1]);
       break;
-
+    case COMMAND_GET_COLOR:
+        sendColor();
+        
     case COMMAND_STOP:
         sendOK();
         stop();
@@ -653,6 +686,7 @@ void goPID(){
   rspeed = rcnt; /// 0.1;
   rcnt = 0;
   in = lspeed - rspeed;
+  //Serial.println(in);
   pid.Compute();
   int lm = val+out;
   int rm = (val-out);
@@ -682,11 +716,20 @@ void setup() {
   enablePullups();
   initializeState();
   sei();
-  MsTimer2::set(40, goPID);
+  MsTimer2::set(30, goPID);
   MsTimer2::start();
   pid.SetMode(AUTOMATIC);
-  pid.SetOutputLimits(-50,50);
-  //forward(0,120);
+  pid.SetOutputLimits(-150,150);
+
+  //Color
+  pinMode(CS_Out, INPUT);
+  pinMode(CS_S0, OUTPUT);
+  pinMode(CS_S1, OUTPUT);
+  pinMode(CS_S2, OUTPUT);
+  pinMode(CS_S3, OUTPUT);
+  digitalWrite(CS_S0, HIGH);
+  digitalWrite(CS_S1, LOW);
+  // forward(0,110);
 }
 
 void handlePacket(TPacket *packet)
