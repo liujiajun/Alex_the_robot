@@ -5,13 +5,12 @@
 #include "packet.h"
 #include "constants.h"
 
-//double lsp, lin, lout, rsp, rin, rout;
-//PID leftpid(&lin, &lout, &lsp,0.5,0,0,DIRECT);
-//PID rightpid(&rin, &rout, &rsp,0.5,0,0,DIRECT);
 double sp=0, in, out;
-PID pid(&in, &out, &sp,1.8,0.3,0,DIRECT);
-double lspeed, rspeed;
-unsigned long lcnt=0, rcnt=0, ltimer=0, rtimer=0;
+PID pid(&in, &out, &sp,10,0,0,DIRECT);
+double lspeed=0, rspeed=0;
+unsigned long lcnt=0, rcnt=0;
+double lPeriod, rPeriod, llast=0, rlast=0;
+double lLastImcompletePulse=0, rLastImcompletePulse=0;
 int val;
 
 typedef enum {
@@ -238,7 +237,10 @@ void enablePullups()
 // Functions to be called by INT0 and INT1 ISRs.
 void leftISR()
 {
+  //PID
   lcnt++;
+  lPeriod = micros()-llast;
+  llast = micros();
   
   if (dir == FORWARD) {
     leftForwardTicks++;
@@ -250,25 +252,20 @@ void leftISR()
     leftForwardTicksTurns++;
   }
 
-  //leftRevs = leftTicks / COUNTS_PER_REV;
-
-  // We calculate forwardDist only in leftISR because we
-  // assume that the left and right wheels move at the same
-  // time.
   if (dir == FORWARD) 
     forwardDist = (unsigned long) ((float)leftForwardTicks / COUNTS_PER_REV * WHEEL_CIRC);
   else if (dir == BACKWARD)
     reverseDist = (unsigned long) ((float)leftReverseTicks / COUNTS_PER_REV * WHEEL_CIRC); 
 
-  
-  //Serial.print("LEFT: ");
-  //Serial.println(leftTicks);
-}
+   //Serial.print("LEFT: "); Serial.println(leftTicks);
+} 
 
 void rightISR()
 {
+  //PID
   rcnt++;
-  //Serial.println(rcnt);
+  rPeriod = micros()-rlast;
+  rlast = micros();
   
   if (dir == FORWARD) {
     rightForwardTicks++;
@@ -279,27 +276,16 @@ void rightISR()
   } else if (dir == RIGHT) {
     rightForwardTicksTurns++;
   }
-
-  //rightRevs = rightTicks / COUNTS_PER_REV;
-  //Serial.print("RIGHT: ");
-  //Serial.println(rightTicks);
 }
 
 // Set up the external interrupt pins INT0 and INT1
 // for falling edge triggered. Use bare-metal.
 void setupEINT()
 {
-  // Use bare-metal to configure pins 2 and 3 to be
-  // falling edge triggered. Remember to enable
-  // the INT0 and INT1 interrupts.
-
+  //pin2,3 falling edge
   EICRA = 0b00001010;
   EIMSK = 0b00000011;
 }
-
-// Implement the external interrupt ISRs below.
-// INT0 ISR should call leftISR while INT1 ISR
-// should call rightISR.
 
 ISR(INT0_vect)
 {
@@ -310,9 +296,6 @@ ISR(INT1_vect)
 {
   rightISR();
 }
-
-
-// Implement INT0 and INT1 ISRs above.
 
 /*
  * Setup and start codes for serial communications
@@ -648,12 +631,21 @@ void waitForHello()
   } // !exit
 }
 void goPID(){
-  lspeed = lcnt;/// 0.1;
-  lcnt = 0;
-  rspeed = rcnt; /// 0.1;
-  rcnt = 0;
+  
+  double lIncompletePulse = (micros()-llast) / lPeriod;
+  int lcompletePulse = lcnt;
+  lspeed = (1-lLastImcompletePulse + lcnt-1 + lIncompletePulse);
+  lLastImcompletePulse = lIncompletePulse;
+  double rIncompletePulse = (micros()-rlast) / rPeriod;
+  int rcompletePulse = rcnt;
+  rspeed = (1-rLastImcompletePulse + rcnt-1 + rIncompletePulse);
+  rLastImcompletePulse = rIncompletePulse;
+  lcnt=0; rcnt=0;
   in = lspeed - rspeed;
   pid.Compute();
+  //Serial.print("in:"); 
+  Serial.println(in); 
+  //Serial.print(" out"); Serial.println(out);
   int lm = val+out;
   int rm = (val-out);
   if (dir == FORWARD){
@@ -686,7 +678,10 @@ void setup() {
   MsTimer2::start();
   pid.SetMode(AUTOMATIC);
   pid.SetOutputLimits(-50,50);
-  //forward(0,120);
+  analogWrite(LF, 160);
+  analogWrite(RF, 160);
+  delay(300);
+  forward(0,120);
 }
 
 void handlePacket(TPacket *packet)
@@ -742,7 +737,6 @@ void loop() {
               newDist=0;
               stop();
           } else {
-              
               //Serial.print("output: "); Serial.print(out); Serial.print("|"); 
               //Serial.print(lm); Serial.print(" "); Serial.println(rm);
           }
