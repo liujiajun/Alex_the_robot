@@ -4,13 +4,24 @@
 #include <MsTimer2.h>
 #include "packet.h"
 #include "constants.h"
+#define CS_S0 A4
+#define CS_S1 A3
+#define CS_S2 A1
+#define CS_S3 A0
+#define CS_Out A2
+//RGB
+int red;
+int green;
+int blue;
 
 double sp=0, in, out;
+
 PID pid(&in, &out, &sp,10,0,0,DIRECT);
 double lspeed=0, rspeed=0;
 unsigned long lcnt=0, rcnt=0;
 double lPeriod, rPeriod, llast=0, rlast=0;
 double lLastImcompletePulse=0, rLastImcompletePulse=0;
+
 int val;
 
 typedef enum {
@@ -66,7 +77,7 @@ volatile unsigned long rightForwardTicks;
 volatile unsigned long leftReverseTicks; 
 volatile unsigned long rightReverseTicks;
 
-
+ 
 volatile unsigned long leftForwardTicksTurns; 
 volatile unsigned long rightForwardTicksTurns;
 volatile unsigned long leftReverseTicksTurns; 
@@ -141,7 +152,32 @@ void sendStatus()
   // to send out the packet. See sendMessage on how to use sendResponse.
   //
 }
-
+void sendColor()
+{
+  const int N = 10;
+  TPacket colorPacket;
+  colorPacket.packetType = PACKET_TYPE_RESPONSE;
+  colorPacket.command = RESP_COLOR;
+  int rsum=0, gsum=0, bsum=0;
+  for(int i=0; i<N; i++){
+    digitalWrite(CS_S2,LOW);
+    digitalWrite(CS_S3,LOW);
+    rsum += pulseIn(CS_Out, LOW);
+    delay(40);
+    digitalWrite(CS_S2,HIGH);
+    digitalWrite(CS_S3,HIGH);
+    gsum += pulseIn(CS_Out, HIGH);
+    delay(40);
+    digitalWrite(CS_S2,LOW);
+    digitalWrite(CS_S3,HIGH);
+    bsum += pulseIn(CS_Out, HIGH);
+    delay(40);
+}
+  colorPacket.params[0] = rsum/N;
+  colorPacket.params[1] = gsum/N;
+  colorPacket.params[2] = bsum/N;
+  sendResponse (&colorPacket);
+}
 void sendMessage(const char *message)
 {
   // Sends text messages back to the Pi. Useful
@@ -395,19 +431,12 @@ void forward(float dist, float speed)
   else
       deltaDist = 9999999;
   newDist = forwardDist + deltaDist; 
+  
+  analogWrite(LF, 160); analogWrite(RF, 160); analogWrite(LR,0); analogWrite(RR, 0);
+  delay(300);
   dir = FORWARD;
   
   val = speed;//pwmVal(speed);
-  //lsp = val; rsp = val;
-
-  // LF = Left forward pin, LR = Left reverse pin
-  // RF = Right forward pin, RR = Right reverse pin
-  // This will be replaced later with bare-metal code.
-  
-  //analogWrite(LF, val);
-  //analogWrite(RF, val);
-  //analogWrite(LR,0);
-  //analogWrite(RR, 0);
 }
 
 // Reverse Alex "dist" cm at speed "speed".
@@ -457,6 +486,11 @@ unsigned long computeDeltaTicks (float ang)
 
 void left(float ang, float speed)
 {
+  analogWrite(LR, 160);
+  analogWrite(RF, 160);
+  analogWrite(LF, 0);
+  analogWrite(RR, 0);
+  delay(150);
   val = speed;
   dir = LEFT;
   
@@ -471,10 +505,6 @@ void left(float ang, float speed)
   // We will also replace this code with bare-metal later.
   // To turn left we reverse the left wheel and move
   // the right wheel forward.
-  //analogWrite(LR, val);
-  //analogWrite(RF, val);
-  //analogWrite(LF, 0);
-  //analogWrite(RR, 0);
 }
 
 // Turn Alex right "ang" degrees at speed "speed".
@@ -574,7 +604,9 @@ void handleCommand(TPacket *command)
         sendOK();
         right((float) command->params[0], (float) command->params[1]);
       break;
-
+    case COMMAND_GET_COLOR:
+        sendColor();
+        
     case COMMAND_STOP:
         sendOK();
         stop();
@@ -642,6 +674,7 @@ void goPID(){
   rLastImcompletePulse = rIncompletePulse;
   lcnt=0; rcnt=0;
   in = lspeed - rspeed;
+  //Serial.println(in);
   pid.Compute();
   //Serial.print("in:"); 
   Serial.println(in); 
@@ -674,14 +707,25 @@ void setup() {
   enablePullups();
   initializeState();
   sei();
-  MsTimer2::set(40, goPID);
+
+  //PID
+  MsTimer2::set(30, goPID);
   MsTimer2::start();
   pid.SetMode(AUTOMATIC);
   pid.SetOutputLimits(-50,50);
   analogWrite(LF, 160);
   analogWrite(RF, 160);
-  delay(300);
-  forward(0,120);
+  pid.SetOutputLimits(-150,150);
+
+  //Color
+  pinMode(CS_Out, INPUT);
+  pinMode(CS_S0, OUTPUT);
+  pinMode(CS_S1, OUTPUT);
+  pinMode(CS_S2, OUTPUT);
+  pinMode(CS_S3, OUTPUT);
+  digitalWrite(CS_S0, HIGH);
+  digitalWrite(CS_S1, LOW);
+  //forward(0,110);
 }
 
 void handlePacket(TPacket *packet)
