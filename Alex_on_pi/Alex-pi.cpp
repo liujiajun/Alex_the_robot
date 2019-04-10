@@ -52,6 +52,12 @@ void handleColor(TPacket *packet)
 	printf("Green: %d\n", packet -> params[1]);
 	printf("Blue: %d\n", packet -> params[2]);
 }
+void handleIR(TPacket *packet)
+{
+	printf("IR1: %d\n", packet -> params[0]);
+	printf("IR2: %d\n", packet -> params[1]);
+	printf("IR3: %d\n", packet -> params[2]);
+}
 void handleResponse(TPacket *packet)
 {
 	// The response code is stored in command
@@ -67,6 +73,9 @@ void handleResponse(TPacket *packet)
 		
 		case RESP_COLOR:
 			handleColor(packet);
+		break;
+		case RESP_IR:
+			handleIR(packet);
 		break;
 		default:
 			printf("Alex is confused.\n");
@@ -240,7 +249,11 @@ void sendCommand(char command)
 			commandPacket.command = COMMAND_GET_COLOR;
 			sendPacket(&commandPacket);
 			break;
-			
+		case 'i':
+		case 'I':
+			commandPacket.command = COMMAND_GET_IR;
+			sendPacket(&commandPacket);
+			break;
 		case 'q':
 		case 'Q':
 			exitFlag=1;
