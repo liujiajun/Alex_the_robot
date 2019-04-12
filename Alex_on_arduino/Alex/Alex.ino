@@ -9,20 +9,23 @@
 #define CS_S2 A1
 #define CS_S3 A0
 #define CS_Out A2
+#define FRONT_IR A5
 //RGB
 int red;
 int green;
 int blue;
 
 double sp=0, in, out;
+PID pid(&in, &out, &sp,10,10,0,DIRECT);
 
-PID pid(&in, &out, &sp,10,0,0,DIRECT);
 double lspeed=0, rspeed=0;
 unsigned long lcnt=0, rcnt=0;
 double lPeriod, rPeriod, llast=0, rlast=0;
 double lLastImcompletePulse=0, rLastImcompletePulse=0;
-
 int val;
+
+double in2, out2, sp2=0;
+PID pid2(&in2, &out2, &sp2, 3, 0, 0, DIRECT);
 
 typedef enum {
   STOP = 0,
@@ -178,6 +181,15 @@ void sendColor()
   colorPacket.params[2] = bsum/N;
   sendResponse (&colorPacket);
 }
+void sendIR(){
+  TPacket IRPacket;
+  IRPacket.packetType = PACKET_TYPE_RESPONSE;
+  IRPacket.command = RESP_IR;
+  IRPacket.params[0] = digitalRead(FRONT_IR);
+  IRPacket.params[1] = 0;
+  IRPacket.params[2] = 0;
+  sendResponse (&IRPacket);
+}
 void sendMessage(const char *message)
 {
   // Sends text messages back to the Pi. Useful
@@ -310,7 +322,7 @@ void rightISR()
   } else if (dir == LEFT) {
     rightReverseTicksTurns++;
   } else if (dir == RIGHT) {
-    rightForwardTicksTurns++;
+    rightReverseTicksTurns++;
   }
 }
 
@@ -403,7 +415,7 @@ void setupMotors()
 // blank.
 void startMotors()
 {
-  
+
 }
 
 // Convert percentages to PWM values
@@ -431,11 +443,7 @@ void forward(float dist, float speed)
   else
       deltaDist = 9999999;
   newDist = forwardDist + deltaDist; 
-  
-  analogWrite(LF, 160); analogWrite(RF, 160); analogWrite(LR,0); analogWrite(RR, 0);
-  delay(300);
-  dir = FORWARD;
-  
+  dir = FORWARD; 
   val = speed;//pwmVal(speed);
 }
 
@@ -451,24 +459,9 @@ void reverse(float dist, float speed)
       deltaDist = dist;
   else
       deltaDist = 9999999;
-
   newDist = reverseDist + deltaDist;
- 
   dir = BACKWARD;
-  
-  int val = pwmVal(speed);
-
-  // For now we will ignore dist and 
-  // reverse indefinitely. We will fix this
-  // in Week 9.
-
-  // LF = Left forward pin, LR = Left reverse pin
-  // RF = Right forward pin, RR = Right reverse pin
-  // This will be replaced later with bare-metal code.
-  analogWrite(LR, val);
-  analogWrite(RR, val);
-  analogWrite(LF, 0);
-  analogWrite(RF, 0);
+  val = speed;
 }
 
 // Turn Alex left "ang" degrees at speed "speed".
@@ -486,25 +479,14 @@ unsigned long computeDeltaTicks (float ang)
 
 void left(float ang, float speed)
 {
-  analogWrite(LR, 160);
-  analogWrite(RF, 160);
-  analogWrite(LF, 0);
-  analogWrite(RR, 0);
-  delay(150);
   val = speed;
   dir = LEFT;
-  
   if (ang == 0)
       deltaTicks = 99999999;
   else 
       deltaTicks = computeDeltaTicks(ang);
-
+  
   targetTicks = leftReverseTicksTurns + deltaTicks;
-
-  // For now we will ignore ang. We will fix this in Week 9.
-  // We will also replace this code with bare-metal later.
-  // To turn left we reverse the left wheel and move
-  // the right wheel forward.
 }
 
 // Turn Alex right "ang" degrees at speed "speed".
@@ -515,7 +497,7 @@ void left(float ang, float speed)
 void right(float ang, float speed)
 {
   dir = RIGHT;
-  int val = speed;
+  val = speed;
 
   if (ang == 0)
       deltaTicks = 99999999;
@@ -523,15 +505,6 @@ void right(float ang, float speed)
       deltaTicks = computeDeltaTicks(ang);
 
   targetTicks = rightReverseTicksTurns + deltaTicks;
-  
-  // For now we will ignore ang. We will fix this in Week 9.
-  // We will also replace this code with bare-metal later.
-  // To turn right we reverse the right wheel and move
-  // the left wheel forward.
-  analogWrite(RR, val);
-  analogWrite(LF, val);
-  analogWrite(LR, 0);
-  analogWrite(RF, 0);
 }
 
 // Stop Alex. To replace with bare-metal code later.
@@ -606,7 +579,10 @@ void handleCommand(TPacket *command)
       break;
     case COMMAND_GET_COLOR:
         sendColor();
-        
+      break;
+    case COMMAND_GET_IR:
+        sendIR();
+      break;
     case COMMAND_STOP:
         sendOK();
         stop();
@@ -663,33 +639,52 @@ void waitForHello()
   } // !exit
 }
 void goPID(){
-  
-  double lIncompletePulse = (micros()-llast) / lPeriod;
-  int lcompletePulse = lcnt;
-  lspeed = (1-lLastImcompletePulse + lcnt-1 + lIncompletePulse);
-  lLastImcompletePulse = lIncompletePulse;
-  double rIncompletePulse = (micros()-rlast) / rPeriod;
-  int rcompletePulse = rcnt;
-  rspeed = (1-rLastImcompletePulse + rcnt-1 + rIncompletePulse);
-  rLastImcompletePulse = rIncompletePulse;
-  lcnt=0; rcnt=0;
-  in = lspeed - rspeed;
-  //Serial.println(in);
-  pid.Compute();
-  //Serial.print("in:"); 
-  Serial.println(in); 
-  //Serial.print(" out"); Serial.println(out);
-  int lm = val+out;
-  int rm = (val-out);
-  if (dir == FORWARD){
-      analogWrite(LF, lm); analogWrite(RF, rm);
-      analogWrite(LR,0); analogWrite(RR,0);
-  } else if (dir == LEFT) {
-       analogWrite(LF, 0); analogWrite(RF, rm);
-       analogWrite(LR,lm); analogWrite(RR,0);
-  } else if (dir == STOP){
-    stop();
+  int lm,rm;
+  if (dir == FORWARD || dir == BACKWARD){
+      double lIncompletePulse = (micros()-llast) / lPeriod;
+      int lcompletePulse = lcnt;
+      lspeed = (1-lLastImcompletePulse + lcnt-1 + lIncompletePulse);
+      lLastImcompletePulse = lIncompletePulse;
+      double rIncompletePulse = (micros()-rlast) / rPeriod;
+      int rcompletePulse = rcnt;
+      rspeed = (1-rLastImcompletePulse + rcnt-1 + rIncompletePulse);
+      rLastImcompletePulse = rIncompletePulse;
+      if(lcnt>5 && rcnt>5) {
+          in = lspeed - rspeed;
+          pid.Compute();
+      } else {
+          if (dir == BACKWARD) { analogWrite(LF, 0); analogWrite(RF, 0); analogWrite(LR,160); analogWrite(RR, 160); }    
+          if (dir == FORWARD) { analogWrite(LF, 160); analogWrite(RF, 160); analogWrite(LR,0); analogWrite(RR, 0); }    
+      }
+      //in = lcnt-rcnt;
+      //pid.Compute();
+      //Serial.print("cnt"); 
+      //Serial.print(lcnt); Serial.print(" "); Serial.print(rcnt);  Serial.print("  speed: ");
+      //Serial.print(lspeed);Serial.print(" "); Serial.print(rspeed); 
+      //Serial.print("  out:"); Serial.println(out);
+     lm = val+out;
+     rm = val-out;
+  } else {
+     in2 = (double)lcnt - rcnt;
+     pid2.Compute();
+     lm = val + out2;
+     rm = val - out2; 
+     //Serial.print(lcnt); Serial.print("  "); Serial.println(rcnt);
   }
+  
+  if (dir == FORWARD){
+      analogWrite(LF, lm); analogWrite(RF, rm); analogWrite(LR,0); analogWrite(RR,0);
+  } else if (dir == BACKWARD){
+      analogWrite(LF, 0); analogWrite(RF, 0); analogWrite(LR,lm); analogWrite(RR,rm);
+  } else if (dir == LEFT){
+      analogWrite(LF, 0); analogWrite(RF, rm); analogWrite(LR,lm); analogWrite(RR,0);
+  } else if (dir == RIGHT){
+      analogWrite(LF, lm); analogWrite(RF, 0); analogWrite(LR,0); analogWrite(RR,rm);
+  } else if (dir == STOP){
+      stop();
+  }
+  
+  lcnt=0; rcnt=0;
 }
 
 void setup() {
@@ -709,14 +704,13 @@ void setup() {
   sei();
 
   //PID
-  MsTimer2::set(30, goPID);
+  MsTimer2::set(100, goPID);
   MsTimer2::start();
   pid.SetMode(AUTOMATIC);
   pid.SetOutputLimits(-50,50);
-  analogWrite(LF, 160);
-  analogWrite(RF, 160);
-  pid.SetOutputLimits(-150,150);
-
+  pid2.SetMode(AUTOMATIC);
+  pid2.SetOutputLimits(-25,25);
+  //left(0,130);
   //Color
   pinMode(CS_Out, INPUT);
   pinMode(CS_S0, OUTPUT);
@@ -725,7 +719,10 @@ void setup() {
   pinMode(CS_S3, OUTPUT);
   digitalWrite(CS_S0, HIGH);
   digitalWrite(CS_S1, LOW);
-  //forward(0,110);
+  //IR
+  pinMode(FRONT_IR, INPUT);
+  //reverse(0,130);
+  //forward(0,130);
 }
 
 void handlePacket(TPacket *packet)
@@ -751,13 +748,9 @@ void handlePacket(TPacket *packet)
 }
 
 void loop() {
-
-  //Serial.print("spd: "); 
-  //Serial.print(lspeed-rspeed); Serial.print(" | "); Serial.print(lspeed); Serial.print(" "); Serial.print(rspeed); Serial.print("   ");
-  TPacket recvPacket; // This holds commands from the Pi
-
-  TResult result = readPacket(&recvPacket);
   
+  TPacket recvPacket; // This holds commands from the Pi
+  TResult result = readPacket(&recvPacket);
   if(result == PACKET_OK)
     handlePacket(&recvPacket);
   else
@@ -775,8 +768,9 @@ void loop() {
   {   
       if(dir==FORWARD)
       {    
-          if(forwardDist > newDist)    
-          {     
+          if(forwardDist > newDist || digitalRead(FRONT_IR) == 0)    
+          {
+              if(digitalRead(FRONT_IR) == 0) sendMessage("Front obstacle");
               deltaDist=0;
               newDist=0;
               stop();

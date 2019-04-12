@@ -1,33 +1,36 @@
 #include <stdio.h>
+#include <iostream>
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <string>
+#include <sstream>
 #include "packet.h"
 #include "serial.h"
 #include "serialize.h"
 #include "constants.h"
-
+using namespace std;
 #define PORT_NAME			"/dev/ttyACM0"
 #define BAUD_RATE			B57600
 
 int exitFlag=0;
 sem_t _xmitSema;
-
+//gcc Alex-pi.cpp serial.cpp serialize.cpp -pthread -o Alex-pi
 void handleError(TResult error)
 {
 	switch(error)
 	{
 		case PACKET_BAD:
-			printf("ERROR: Bad Magic Number\n");
+			cout<<"ERROR: Bad Magic Number\n";
 			break;
 
 		case PACKET_CHECKSUM_BAD:
-			printf("ERROR: Bad checksum\n");
+			cout<<"ERROR: Bad checksum\n";
 			break;
 
 		default:
-			printf("ERROR: UNKNOWN ERROR\n");
+			cout<<"ERROR: UNKNOWN ERROR\n";
 	}
 }
 
@@ -48,13 +51,17 @@ void handleStatus(TPacket *packet)
 }
 void handleColor(TPacket *packet)
 {
-	printf("Red: %d\n", packet -> params[0]);
+	printf("\nRed: %d\n", packet -> params[0]);
 	printf("Green: %d\n", packet -> params[1]);
 	printf("Blue: %d\n", packet -> params[2]);
+	char color; 
+	if (packet -> params[1] - packet -> params[0] > 30) color = 'R';
+	else color = 'G';
+	printf("Color: %c\n", color);
 }
 void handleIR(TPacket *packet)
 {
-	printf("IR1: %d\n", packet -> params[0]);
+	printf("\nIR1: %d\n", packet -> params[0]);
 	printf("IR2: %d\n", packet -> params[1]);
 	printf("IR3: %d\n", packet -> params[2]);
 }
@@ -64,7 +71,7 @@ void handleResponse(TPacket *packet)
 	switch(packet->command)
 	{
 		case RESP_OK:
-			printf("Command OK\n");
+			cout<<"Command OK\n";
 		break;
 
 		case RESP_STATUS:
@@ -78,7 +85,7 @@ void handleResponse(TPacket *packet)
 			handleIR(packet);
 		break;
 		default:
-			printf("Alex is confused.\n");
+			cout<<"Alex is confused.\n";
 	}
 }
 
@@ -88,23 +95,23 @@ void handleErrorResponse(TPacket *packet)
 	switch(packet->command)
 	{
 		case RESP_BAD_PACKET:
-			printf("Arduino received bad magic number\n");
+			cout<<"Arduino received bad magic number\n";
 		break;
 
 		case RESP_BAD_CHECKSUM:
-			printf("Arduino received bad checksum\n");
+			cout<<"Arduino received bad checksum\n";
 		break;
 
 		case RESP_BAD_COMMAND:
-			printf("Arduino received bad command\n");
+			cout<<"Arduino received bad command\n";
 		break;
 
 		case RESP_BAD_RESPONSE:
-			printf("Arduino received unexpected response\n");
+			cout<<"Arduino received unexpected response\n";
 		break;
 
 		default:
-			printf("Arduino reports a weird error\n");
+			cout<<"Arduino reports a weird error\n";
 	}
 }
 
@@ -167,7 +174,7 @@ void *receiveThread(void *p)
 			else 
 				if(result != PACKET_INCOMPLETE)
 				{
-					printf("PACKET ERROR\n");
+					cout<<"PACKET ERROR\n";
 					handleError(result);
 				}
 		}
@@ -183,44 +190,44 @@ void flushInput()
 
 void getParams(TPacket *commandPacket)
 {
-	printf("Enter distance/angle in cm/degrees (e.g. 50) and power in %% (e.g. 75) separated by space.\n");
-	printf("E.g. 50 75 means go at 50 cm at 75%% power for forward/backward, or 50 degrees left or right turn at 75%%  power\n");
+	printf("Enter distance/angle and power: ");
 	scanf("%d %d", &commandPacket->params[0], &commandPacket->params[1]);
 	flushInput();
 }
 
-void sendCommand(char command)
+void sendCommand(char command, int a, int b)
 {
 	TPacket commandPacket;
 
 	commandPacket.packetType = PACKET_TYPE_COMMAND;
-
+	commandPacket.params[0] = a;
+	commandPacket.params[1] = b;
 	switch(command)
 	{
 		case 'f':
 		case 'F':
-			getParams(&commandPacket);
+			//getParams(&commandPacket);
 			commandPacket.command = COMMAND_FORWARD;
 			sendPacket(&commandPacket);
 			break;
 
 		case 'b':
 		case 'B':
-			getParams(&commandPacket);
+			//getParams(&commandPacket);
 			commandPacket.command = COMMAND_REVERSE;
 			sendPacket(&commandPacket);
 			break;
 
 		case 'l':
 		case 'L':
-			getParams(&commandPacket);
+			//getParams(&commandPacket);
 			commandPacket.command = COMMAND_TURN_LEFT;
 			sendPacket(&commandPacket);
 			break;
 
 		case 'r':
 		case 'R':
-			getParams(&commandPacket);
+			//getParams(&commandPacket);
 			commandPacket.command = COMMAND_TURN_RIGHT;
 			sendPacket(&commandPacket);
 			break;
@@ -289,14 +296,23 @@ int main()
 
 	while(!exitFlag)
 	{
-		char ch;
-		printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats q=exit)\n");
-		scanf("%c", &ch);
-
+		//char ch;
+		//cout<<"Command: ";
+		//scanf("%c", &ch);
+		string s; getline(cin, s);
+		int a, b;
+		if (s[0] == 'f' || s[0] == 'b'){
+			a = 10; b = 130;
+		} else if (s[0] == 'l' || s[0] == 'r'){
+			a = 15; b = 200;
+		}
+		if (s.size() > 1){
+			stringstream ss(s);
+			char dummy; ss>>dummy>>a>>b;
+		}
 		// Purge extraneous characters from input stream
-		flushInput();
-
-		sendCommand(ch);
+		//flushInput(); cin.clear();
+		sendCommand(s[0], a, b);
 	}
 
 	printf("Closing connection to Arduino.\n");
