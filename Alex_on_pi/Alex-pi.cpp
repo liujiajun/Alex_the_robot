@@ -204,36 +204,36 @@ void sendCommand(char command, int a, int b)
 	commandPacket.params[1] = b;
 	switch(command)
 	{
-		case 'f':
-		case 'F':
+		case 'w':
+		case 'W':
 			//getParams(&commandPacket);
 			commandPacket.command = COMMAND_FORWARD;
 			sendPacket(&commandPacket);
 			break;
 
-		case 'b':
-		case 'B':
+		case 's':
+		case 'S':
 			//getParams(&commandPacket);
 			commandPacket.command = COMMAND_REVERSE;
 			sendPacket(&commandPacket);
 			break;
 
-		case 'l':
-		case 'L':
+		case 'a':
+		case 'A':
 			//getParams(&commandPacket);
 			commandPacket.command = COMMAND_TURN_LEFT;
 			sendPacket(&commandPacket);
 			break;
 
-		case 'r':
-		case 'R':
+		case 'd':
+		case 'D':
 			//getParams(&commandPacket);
 			commandPacket.command = COMMAND_TURN_RIGHT;
 			sendPacket(&commandPacket);
 			break;
 
-		case 's':
-		case 'S':
+		case 'e':
+		case 'E':
 			commandPacket.command = COMMAND_STOP;
 			sendPacket(&commandPacket);
 			break;
@@ -301,9 +301,9 @@ int main()
 		//scanf("%c", &ch);
 		string s; getline(cin, s);
 		int a, b;
-		if (s[0] == 'f' || s[0] == 'b'){
+		if (s[0] == 'w' || s[0] == 's'){
 			a = 10; b = 130;
-		} else if (s[0] == 'l' || s[0] == 'r'){
+		} else if (s[0] == 'a' || s[0] == 'd'){
 			a = 15; b = 200;
 		}
 		if (s.size() > 1){
