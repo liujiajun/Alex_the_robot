@@ -1,3 +1,4 @@
+//Compile using gcc Alex-pi.cpp serial.cpp serialize.cpp -pthread -o Alex-pi
 #include <stdio.h>
 #include <iostream>
 #include <pthread.h>
@@ -16,7 +17,6 @@ using namespace std;
 
 int exitFlag=0;
 sem_t _xmitSema;
-//gcc Alex-pi.cpp serial.cpp serialize.cpp -pthread -o Alex-pi
 void handleError(TResult error)
 {
 	switch(error)
@@ -55,7 +55,7 @@ void handleColor(TPacket *packet)
 	printf("Green: %d\n", packet -> params[1]);
 	printf("Blue: %d\n", packet -> params[2]);
 	char color; 
-	if (packet -> params[1] - packet -> params[0] > 30) color = 'R';
+	if (packet -> params[1] - packet -> params[0] > 23) color = 'R';
 	else color = 'G';
 	printf("Color: %c\n", color);
 }
@@ -206,28 +206,24 @@ void sendCommand(char command, int a, int b)
 	{
 		case 'w':
 		case 'W':
-			//getParams(&commandPacket);
 			commandPacket.command = COMMAND_FORWARD;
 			sendPacket(&commandPacket);
 			break;
 
 		case 's':
 		case 'S':
-			//getParams(&commandPacket);
 			commandPacket.command = COMMAND_REVERSE;
 			sendPacket(&commandPacket);
 			break;
 
 		case 'a':
 		case 'A':
-			//getParams(&commandPacket);
 			commandPacket.command = COMMAND_TURN_LEFT;
 			sendPacket(&commandPacket);
 			break;
 
 		case 'd':
 		case 'D':
-			//getParams(&commandPacket);
 			commandPacket.command = COMMAND_TURN_RIGHT;
 			sendPacket(&commandPacket);
 			break;
@@ -296,22 +292,21 @@ int main()
 
 	while(!exitFlag)
 	{
-		//char ch;
-		//cout<<"Command: ";
-		//scanf("%c", &ch);
 		string s; getline(cin, s);
 		int a, b;
+
+		//default power and distance
 		if (s[0] == 'w' || s[0] == 's'){
 			a = 10; b = 130;
 		} else if (s[0] == 'a' || s[0] == 'd'){
 			a = 15; b = 200;
 		}
+
+		//If user specifies custom power and distance
 		if (s.size() > 1){
 			stringstream ss(s);
 			char dummy; ss>>dummy>>a>>b;
 		}
-		// Purge extraneous characters from input stream
-		//flushInput(); cin.clear();
 		sendCommand(s[0], a, b);
 	}
 

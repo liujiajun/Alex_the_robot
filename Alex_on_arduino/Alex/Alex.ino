@@ -15,15 +15,16 @@ int red;
 int green;
 int blue;
 
+//Going straight PID variables
 double sp=0, in, out;
-PID pid(&in, &out, &sp,10,10,0,DIRECT);
-
+PID pid(&in, &out, &sp,10,10,0,DIRECT); 
 double lspeed=0, rspeed=0;
 unsigned long lcnt=0, rcnt=0;
 double lPeriod, rPeriod, llast=0, rlast=0;
-double lLastImcompletePulse=0, rLastImcompletePulse=0;
+double lLastImcompletePulse=0, rLastImcompletePulse=0; //For imcomplete pulse computaion
 int val;
 
+//Turning PID variables
 double in2, out2, sp2=0;
 PID pid2(&in2, &out2, &sp2, 3, 0, 0, DIRECT);
 
@@ -354,7 +355,6 @@ ISR(INT1_vect)
 // with bare-metal code.
 void setupSerial()
 {
-  // To replace later with bare-metal.
   Serial.begin(57600);
 }
 
@@ -364,8 +364,6 @@ void setupSerial()
 
 void startSerial()
 {
-  // Empty for now. To be replaced with bare-metal code
-  // later on.
   
 }
 
@@ -375,12 +373,9 @@ void startSerial()
 
 int readSerial(char *buffer)
 {
-
   int count=0;
-
   while(Serial.available())
     buffer[count++] = Serial.read();
-
   return count;
 }
 
@@ -510,7 +505,7 @@ void right(float ang, float speed)
 // Stop Alex. To replace with bare-metal code later.
 void stop()
 {
-  dir = STOP; ///xxxxx
+  dir = STOP;
   analogWrite(LF, 0);
   analogWrite(LR, 0);
   analogWrite(RF, 0);
@@ -589,7 +584,7 @@ void handleCommand(TPacket *command)
       break;
 
     case COMMAND_GET_STATS:
-        sendStatus(); //
+        sendStatus(); 
       break;
     
     case COMMAND_CLEAR_STATS:
@@ -638,9 +633,13 @@ void waitForHello()
           sendBadChecksum();
   } // !exit
 }
+
+//Compute PID and send control signal to motor
 void goPID(){
   int lm,rm;
   if (dir == FORWARD || dir == BACKWARD){
+    
+      //Handle imcomplete pulse 
       double lIncompletePulse = (micros()-llast) / lPeriod;
       int lcompletePulse = lcnt;
       lspeed = (1-lLastImcompletePulse + lcnt-1 + lIncompletePulse);
@@ -649,19 +648,15 @@ void goPID(){
       int rcompletePulse = rcnt;
       rspeed = (1-rLastImcompletePulse + rcnt-1 + rIncompletePulse);
       rLastImcompletePulse = rIncompletePulse;
+      
       if(lcnt>5 && rcnt>5) {
+        //Use traditional method when starting
           in = lspeed - rspeed;
           pid.Compute();
       } else {
           if (dir == BACKWARD) { analogWrite(LF, 0); analogWrite(RF, 0); analogWrite(LR,160); analogWrite(RR, 160); }    
           if (dir == FORWARD) { analogWrite(LF, 160); analogWrite(RF, 160); analogWrite(LR,0); analogWrite(RR, 0); }    
       }
-      //in = lcnt-rcnt;
-      //pid.Compute();
-      //Serial.print("cnt"); 
-      //Serial.print(lcnt); Serial.print(" "); Serial.print(rcnt);  Serial.print("  speed: ");
-      //Serial.print(lspeed);Serial.print(" "); Serial.print(rspeed); 
-      //Serial.print("  out:"); Serial.println(out);
      lm = val+out;
      rm = val-out;
   } else {
@@ -669,7 +664,6 @@ void goPID(){
      pid2.Compute();
      lm = val + out2;
      rm = val - out2; 
-     //Serial.print(lcnt); Serial.print("  "); Serial.println(rcnt);
   }
   
   if (dir == FORWARD){
@@ -688,8 +682,6 @@ void goPID(){
 }
 
 void setup() {
-  // put your setup code here, to run once:
-
   AlexDiagonal = sqrt (( ALEX_LENGTH * ALEX_LENGTH) + (ALEX_BREADTH * ALEX_BREADTH ));
   AlexCirc = PI * AlexDiagonal;
   
@@ -710,7 +702,7 @@ void setup() {
   pid.SetOutputLimits(-50,50);
   pid2.SetMode(AUTOMATIC);
   pid2.SetOutputLimits(-25,25);
-  //left(0,130);
+  
   //Color
   pinMode(CS_Out, INPUT);
   pinMode(CS_S0, OUTPUT);
@@ -719,10 +711,9 @@ void setup() {
   pinMode(CS_S3, OUTPUT);
   digitalWrite(CS_S0, HIGH);
   digitalWrite(CS_S1, LOW);
+  
   //IR
   pinMode(FRONT_IR, INPUT);
-  //reverse(0,130);
-  //forward(0,130);
 }
 
 void handlePacket(TPacket *packet)
@@ -768,15 +759,12 @@ void loop() {
   {   
       if(dir==FORWARD)
       {    
-          if(forwardDist > newDist || digitalRead(FRONT_IR) == 0)    
+          if(forwardDist > newDist || digitalRead(FRONT_IR) == 0) //Stop when detecting obstacle or reach desired distance 
           {
               if(digitalRead(FRONT_IR) == 0) sendMessage("Front obstacle");
               deltaDist=0;
               newDist=0;
               stop();
-          } else {
-              //Serial.print("output: "); Serial.print(out); Serial.print("|"); 
-              //Serial.print(lm); Serial.print(" "); Serial.println(rm);
           }
       }   
       else
@@ -799,7 +787,6 @@ void loop() {
   }
 
 
-//
 if(deltaTicks > 0)
   {   
       if(dir==LEFT)
