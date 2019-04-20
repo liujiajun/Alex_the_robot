@@ -1,7 +1,6 @@
 #include <PID_v1.h>
 #include <serialize.h>
 #include <math.h>
-#include <MsTimer2.h>
 #include "packet.h"
 #include "constants.h"
 #define CS_S0 A4
@@ -696,8 +695,6 @@ void setup() {
   sei();
 
   //PID
-  MsTimer2::set(100, goPID);
-  MsTimer2::start();
   pid.SetMode(AUTOMATIC);
   pid.SetOutputLimits(-50,50);
   pid2.SetMode(AUTOMATIC);
@@ -739,7 +736,7 @@ void handlePacket(TPacket *packet)
 }
 
 void loop() {
-  
+  goPID();
   TPacket recvPacket; // This holds commands from the Pi
   TResult result = readPacket(&recvPacket);
   if(result == PACKET_OK)
